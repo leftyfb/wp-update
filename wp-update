@@ -1,0 +1,60 @@
+#!/bin/bash
+# Requires wp-cli.phar from http://wp-cli.org/
+
+wp=/path/to/bin/wp-cli.phar
+mycnf=/path/to/my.cnf
+email=email@example.com
+body="" #leave this blank or else you'll always get email regardless of needed updates
+footer="$(date) - $0 - $HOSTNAME"
+
+usage(){
+echo "Usage: $0 <core|plugin|theme|all>"
+}
+
+getwebsite(){
+	local dbname=$(grep DB_NAME $i/wp-config.php |awk -F"'" '{print $4}')
+	local prefix=$(grep table_prefix wp-config.php |awk -F "'" '{print $2}')
+	local table=${prefix}options
+	website=$(mysql --defaults-file=$mycnf -NBe "select option_value from $table where option_name = 'home' OR option_name = 'siteurl';" $dbname|uniq|grep -v ^$|sed 's/http:\/\///g')
+}
+
+update(){
+if [ $1 = "core" ];then
+	sudo $wp core update --allow-root
+else
+	sudo $wp $1 update --all --allow-root
+fi
+}
+
+check_run_email(){
+if [ $1 = "core" ] ; then
+	sudo $wp core check-update --allow-root|grep -q "update_type"
+	if [ $? = 0 ]; then
+		body=$(echo -e "$body\nWordpress $1 update needed for $website...\n$(sudo $wp core check-update --allow-root)\n  \n  ")
+	fi
+else
+	sudo $wp $1 update --allow-root --dry-run --all|grep -q "Available plugin"
+	if [ $? = 0 ] ; then
+		body=$(echo -e "$body\nUpdating Wordpress $(echo $1)s for $website...\n$(update $1)\n  \n  ")
+	fi
+fi
+}
+
+for i in `locate wp-config.php|grep -v vim|sed 's/wp-config.php//g'`;do
+	cd $i
+	getwebsite
+	if [ -z $1 ] ; then
+		usage
+	elif [ $1 = "all" ] ; then
+	 echo "Updating Wordpress core for $website..."
+	 sudo $wp core update --allow-root
+	 update plugin
+	 update theme
+	else
+	 check_run_email $1
+	fi 
+done
+if [ -n "${body}" ] && [ ! -z $1 ] ; then
+	body=$(echo -e "$body\n  \n  $footer")
+	echo "$body"|mail -s "Wordpress $1 update(s)" $email
+fi
