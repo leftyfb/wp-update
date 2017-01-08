@@ -55,6 +55,6 @@ for i in `locate wp-config.php|grep -v vim|sed 's/wp-config.php//g'`;do
 	fi 
 done
 if [ -n "${body}" ] && [ ! -z $1 ] ; then
-	body=$(echo -e "$body\n  \n  $footer")
+	body=$(echo -e "$body\n  \n  \n$footer")
 	echo "$body"|mail -s "Wordpress $1 update(s)" $email
 fi
